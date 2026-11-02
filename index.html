@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>屏幕人生 · 人生可视化</title>
+<link rel="stylesheet" href="shared/theme.css">
+<link rel="stylesheet" href="shared/wheel.css">
+<style>
+  .year-bar { padding: 0 18px 18px; }
+  .yb-cap { font-size: 12px; color: var(--sub); margin-bottom: 6px; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="tool-head">
+    <a class="back" href="preview.html" target="_top">📱 手机预览版</a>
+    <h1>屏幕人生</h1>
+    <p class="sub">每天看手机的时长无感，乘以已活天数就是触目惊心的数字</p>
+  </header>
+
+  <section class="card" id="settingsCard"></section>
+  <section class="card" id="resultCard"></section>
+  <section class="card" id="rescueCard"></section>
+
+  <p class="hint" style="text-align:center">时间是唯一花掉就赚不回来的东西。</p>
+</div>
+
+<div class="sheet-mask" id="sheetMask"></div>
+<div class="sheet" id="sheet">
+  <div class="grabber"></div>
+  <div class="sheet-toolbar">
+    <div class="sheet-title" id="sheetTitle">选择</div>
+    <button class="done-btn" id="sheetDone">完成</button>
+  </div>
+  <div class="wheel-wrap">
+    <div class="wheel-mask-top"></div>
+    <div class="wheel-mask-bottom"></div>
+    <div class="wheel-band"></div>
+    <div class="wheel-row" id="wheelRow"></div>
+  </div>
+</div>
+
+<script src="shared/core.js"></script>
+<script src="shared/wheel.js"></script>
+<script>
+var state = {
+  birthday: LGF.getBirthday(),
+  lifespan: LGF.getLifespan(),
+  dailyHours: parseFloat(LGF.get('sl-hours', '5')) || 5,
+  startAge: parseInt(LGF.get('sl-start', '12'), 10) || 12,
+  saveMin: parseInt(LGF.get('sl-save', '30'), 10)
+};
+
+function hoursToYears(h) { return h / 24 / 365.25; }
+
+function render() {
+  LGF.setBirthday(state.birthday);
+  LGF.setLifespan(state.lifespan);
+  LGF.set('sl-hours', String(state.dailyHours));
+  LGF.set('sl-start', String(state.startAge));
+  LGF.set('sl-save', String(state.saveMin));
+
+  var s = LGF.computeLife(state.birthday, state.lifespan);
+  var usedDays = Math.max(0, s.daysLived - state.startAge * 365.25);
+  var usedHours = usedDays * state.dailyHours;
+  var usedYears = hoursToYears(usedHours);
+  var futureHours = s.remainingDays * state.dailyHours;
+  var futureYears = hoursToYears(futureHours);
+
+  // 换算锚点
+  var books = Math.round(usedHours / 6);          // 一本书约 6 小时
+  var movies = Math.round(usedHours / 2);         // 一部电影约 2 小时
+  var saveHours = s.remainingDays * (state.saveMin / 60);
+  var saveMonths = (state.saveMin / 60) * (s.remainingDays / 30.4);
+
+  document.getElementById('settingsCard').innerHTML =
+    '<div class="row clickable" id="birthdayRow"><span class="label">生日</span>' +
+      '<span class="value">' + state.birthday + '<span class="chevron">›</span></span></div>' +
+    '<div class="separator"></div>' +
+    '<div class="row clickable" id="hoursRow"><span class="label">日均屏幕时间</span>' +
+      '<span class="value">' + state.dailyHours + ' 小时<span class="chevron">›</span></span></div>' +
+    '<div class="separator"></div>' +
+    '<div class="row clickable" id="startRow"><span class="label">几岁开始用手机</span>' +
+      '<span class="value">' + state.startAge + ' 岁<span class="chevron">›</span></span></div>';
+
+  document.getElementById('resultCard').innerHTML =
+    '<div class="stat-cap">你已经把</div>' +
+    '<div class="stat-big">' + usedYears.toFixed(1) + '<span class="stat-unit">年</span></div>' +
+    '<div class="stat-cap" style="padding-top:0">花在了手机屏幕上</div>' +
+    '<div class="progress-track"><div class="progress-fill" style="width:' + Math.min(100, usedHours / (usedHours + futureHours) * 100) + '%"></div></div>' +
+    '<div class="stat-cells">' +
+      '<div class="stat-cell"><div class="num">' + LGF.fmt(Math.round(usedHours)) + '</div><div class="cap">已花（小时）</div></div>' +
+      '<div class="stat-cell"><div class="num">' + futureYears.toFixed(1) + ' 年</div><div class="cap">余生照旧还要花</div></div>' +
+      '<div class="stat-cell"><div class="num">' + LGF.fmt(Math.round(usedHours + futureHours)) + '</div><div class="cap">一生总屏幕（小时）</div></div>' +
+    '</div>' +
+    '<div class="stat-foot">这些时间 ≈ 读完 <b style="color:var(--accent)">' + LGF.fmt(books) + '</b> 本书<br>' +
+    '或看完 <b style="color:var(--accent)">' + LGF.fmt(movies) + '</b> 部电影</div>';
+
+  document.getElementById('rescueCard').innerHTML =
+    '<div class="card-title">赎回模拟器</div>' +
+    '<div class="field-row"><span class="label">每天少玩</span>' +
+      '<input type="range" id="saveRange" min="0" max="120" step="15" value="' + state.saveMin + '"><span class="value" style="min-width:3.5em;text-align:right">' + state.saveMin + ' 分钟</span></div>' +
+    '<div class="stat-foot" id="saveFoot"></div>';
+
+  document.getElementById('saveFoot').innerHTML = state.saveMin > 0
+    ? '余生的 ' + LGF.fmt(s.remainingDays) + ' 天里，能赎回 <b style="color:var(--green)">' + LGF.fmt(Math.round(saveHours)) + ' 小时</b> ≈ <b style="color:var(--green)">' + Math.round(saveMonths) + ' 个月</b> 的完整人生'
+    : '拖动滑块，看看少刷手机能赎回多少人生';
+
+  document.getElementById('birthdayRow').addEventListener('click', function () {
+    WheelUI.openDate(state.birthday,
+      function (v) { state.birthday = v; render(); },
+      function (v) {
+        var el = document.querySelector('#birthdayRow .value');
+        if (el) el.innerHTML = v + '<span class="chevron">›</span>';
+      }, render);
+  });
+  document.getElementById('hoursRow').addEventListener('click', function () {
+    var items = [];
+    for (var i = 1; i <= 16; i++) items.push(i + ' 小时');
+    WheelUI.open('日均屏幕时间', [{ items: items, index: state.dailyHours - 1 }],
+      function (idx) { state.dailyHours = idx[0] + 1; render(); },
+      function (idx) {
+        var el = document.querySelector('#hoursRow .value');
+        if (el) el.innerHTML = (idx[0] + 1) + ' 小时<span class="chevron">›</span>';
+      }, render);
+  });
+  document.getElementById('startRow').addEventListener('click', function () {
+    var items = [];
+    for (var i = 5; i <= 30; i++) items.push(i + ' 岁');
+    WheelUI.open('几岁开始用手机', [{ items: items, index: state.startAge - 5 }],
+      function (idx) { state.startAge = idx[0] + 5; render(); },
+      function (idx) {
+        var el = document.querySelector('#startRow .value');
+        if (el) el.innerHTML = (idx[0] + 5) + ' 岁<span class="chevron">›</span>';
+      }, render);
+  });
+  document.getElementById('saveRange').addEventListener('input', function (e) {
+    state.saveMin = parseInt(e.target.value, 10);
+    LGF.set('sl-save', String(state.saveMin));
+    var el = e.target.parentElement.querySelector('.value');
+    if (el) el.textContent = state.saveMin + ' 分钟';
+    var sh = s.remainingDays * (state.saveMin / 60);
+    var sm = (state.saveMin / 60) * (s.remainingDays / 30.4);
+    document.getElementById('saveFoot').innerHTML = state.saveMin > 0
+      ? '余生的 ' + LGF.fmt(s.remainingDays) + ' 天里，能赎回 <b style="color:var(--green)">' + LGF.fmt(Math.round(sh)) + ' 小时</b> ≈ <b style="color:var(--green)">' + Math.round(sm) + ' 个月</b> 的完整人生'
+      : '拖动滑块，看看少刷手机能赎回多少人生';
+  });
+}
+
+WheelUI.init();
+render();
+</script>
+</body>
+</html>
